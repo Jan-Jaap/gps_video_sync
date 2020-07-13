@@ -4,3 +4,8 @@ Uses OpenCV optical flow to correlate video rotation with GPS heading data.
 
 OpenCV dll with ffmpeg included.
 GPS data used is exported from RaceChrono (android app)
+
+Install dependencies:
+
+ - openvc
+ - configparser
