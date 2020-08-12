@@ -4,7 +4,8 @@ Synchoronize GPS and video data from track racing for use in RaceLogic Circuit T
 Uses OpenCV optical flow to correlate video rotation with GPS heading data.
 
 Install dependencies:
- - opencv                    4.3.0
+
+conda install opencv
 
 
 
