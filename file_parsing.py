@@ -116,7 +116,7 @@ def loadfile_csv(file_name, type, raw=False):
 
 
 
-def write_vbox(file_name, GPS_Data, Info, vbox_aviname, video_params, time_zone=0):
+def write_vbox(file_name, GPS_Data, Info, vbox_prefix, video_params, time_zone=0):
     """Writes .vbo files for RaceLogic Circuit Tools
 
     arguments:
@@ -154,7 +154,10 @@ def write_vbox(file_name, GPS_Data, Info, vbox_aviname, video_params, time_zone=
         for line in vbox_header:
             f.write('{0}\n'.format(line))
 
-        #write [channel units]
+        #write [avi]
+        f.write('\n[avi]\n')
+        f.write(vbox_prefix + '\n')
+        f.write('MP4' + '\n')
 
         #write [comments]
         if Info:
@@ -173,6 +176,7 @@ def write_vbox(file_name, GPS_Data, Info, vbox_aviname, video_params, time_zone=
 ##        f.write('\n[laptiming]\n')
 
         video_data = np.zeros((len(GPS_Data[1]), 2))
+        video_data[:,1] -= 1
 
         #write [session data] and prepare avifileindex and time
         f.write('\n[session data]\n')
@@ -187,21 +191,19 @@ def write_vbox(file_name, GPS_Data, Info, vbox_aviname, video_params, time_zone=
             video_data[ind,0] = i+1
             video_data[ind,1] = (GPS_Data[1][ind] - starttime_video) * 1000
 
-        #write [avi]
-        f.write('\n[avi]\n')
-        f.write(vbox_aviname + '\n')
 
         #write [column names]
         f.write('\n[column names]\n')
-        f.writelines('sats time lat long velocity heading avifileindex avitime\n')
+        f.writelines('sats time lat long velocity heading avifileindex avisynctime\n')
 
 
         #write [data] block
         f.write('\n[data]\n')
 
-
+        ind = video_data[:,0] != 0
+        
         t0 = 0
-        for (D, v) in zip(GPS_Data.T, video_data):
+        for (D, v) in zip(GPS_Data.T[ind], video_data[ind]):
 
             #time since previous measurement
             gps_time = D[1]

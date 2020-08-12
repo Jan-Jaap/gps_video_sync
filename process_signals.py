@@ -179,15 +179,16 @@ def process_gps(GPS_Data):
     return GPS_yaw_rate
 
 
-def resample((x, y), rate):
+def resample(coor, rate):
+    x, y = coor
 
     if not np.all(np.diff(x) > 0):
-        print np.diff(x)
+        print(np.diff(x))
         raise IndexError('x data not in accending order')
 
     new_time = np.arange(min(x),max(x), rate)
 
-    print len(x),'->',len(new_time)
+    print(len(x),'->',len(new_time))
 
     return np.interp(new_time, x, y)
 
@@ -213,7 +214,8 @@ def convert_num(s): #convert strings to numbers
     else:
         return s
 
-def get_angular_speed((x, t)):    #get angular velocity from heading
+def get_angular_speed(inp):    #get angular velocity from heading
+    x, t = inp
     x = np.diff(x)
     x[x>180] -= 360
     x[x<-180] += 360
