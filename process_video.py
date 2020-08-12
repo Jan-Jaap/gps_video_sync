@@ -11,7 +11,7 @@ ESC - exit
 '''
 
 import numpy as np
-import cv2, cv
+import cv2
 import datetime
 
 
@@ -29,14 +29,15 @@ class video_obj:
         self.cam = cv2.VideoCapture(filename_video)
 
         if self.cam is None or not self.cam.isOpened():
-            print 'Warning: unable to open video source: ', filename_video
-            exit('Error opening file')
+            print('Warning: unable to open video source: ', filename_video)
+            print('Error opening file')
+            raise
 
         # get some video properties
-        self.frame_width = int(self.cam.get(cv.CV_CAP_PROP_FRAME_WIDTH))
-        self.frame_heigth = int(self.cam.get(cv.CV_CAP_PROP_FRAME_HEIGHT))
-        self.fps = self.cam.get(cv.CV_CAP_PROP_FPS)
-        self.frame_count = int(self.cam.get(cv.CV_CAP_PROP_FRAME_COUNT))
+        self.frame_width = int(self.cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_heigth = int(self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fps = self.cam.get(cv2.CAP_PROP_FPS)
+        self.frame_count = int(self.cam.get(cv2.CAP_PROP_FRAME_COUNT))
         self.length = float(self.frame_count - 1) / self.fps
 
         if not scan_window==None:
@@ -47,10 +48,10 @@ class video_obj:
         return frame
 
     def set_grid(self, roi, num=100):
-        [x0,x1,y0,y1] = roi
+        x0,x1,y0,y1 = roi
         dx, dy = x1-x0, y1-y0
-        x = np.linspace(x0, x1, round(np.sqrt(num * dx / dy)))
-        y = np.linspace(y0, y1, round(np.sqrt(num * dy / dx)))
+        x = np.linspace(x0, x1, int(np.sqrt(num * dx / dy)))
+        y = np.linspace(y0, y1, int(np.sqrt(num * dy / dx)))
         x, y = np.meshgrid(x, y)
         self.grid = np.float32(np.array([x, y]).T.reshape(-1, 1, 2))
 
@@ -87,7 +88,7 @@ class video_obj:
             def __init__(self):
                 self.frame_gray = np.copy(frame_gray)
                 cv2.imshow('Set Scan Window', frame_gray)
-                cv.SetMouseCallback('Set Scan Window', self.on_mouse,0)
+                cv2.SetMouseCallback('Set Scan Window', self.on_mouse,0)
                 self.finish_flag = False
 
         m = mouse_action()
@@ -105,18 +106,19 @@ class video_obj:
 
     def set_scan_window(self, scan_window):
 
-        roi = np.array(scan_window[0:4]) / 100.
+        roi = np.array(scan_window[0:4]) 
         roi[0:2] *= self.frame_width
         roi[2:4] *= self.frame_heigth
-
+        roi = roi.astype(np.int)
         self.set_grid(roi, scan_window[4])
 
 
     def process_video(self, filename_log, video_output=True):
 
-        def draw_str(dst, (x, y), s):
-            cv2.putText(dst, s, (x+1, y+1), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 0, 0), thickness = 2, lineType=cv2.CV_AA)
-            cv2.putText(dst, s, (x, y), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), lineType=cv2.CV_AA)
+        def draw_str(dst, coor, s):
+            x, y = coor
+            cv2.putText(dst, s, (x+1, y+1), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 0, 0), thickness = 2, lineType=cv2.LINE_AA)
+            cv2.putText(dst, s, (x, y), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), lineType=cv2.LINE_AA)
 
         def calc_flow(prev_gray, frame_gray, p0):
             #calculate the flow for each point in p0
@@ -128,24 +130,26 @@ class video_obj:
             return pan
 
         k = 4
-        self.frame_width  /= k
-        self.frame_heigth /= k
+        frame_width = self.frame_width // k
+        frame_heigth = self.frame_heigth // k 
+    
         if hasattr(self, 'grid'): self.grid /= k
 
 ##        pan_x = np.zeros(self.frame_count)
         pan_x = []
         t0 = datetime.datetime.now()
 
-        for frame_idx in range(self.frame_count):
+        for frame_nr in range(self.frame_count):
 
             frame = self.read()
-            frame = cv2.resize(frame, (self.frame_width, self.frame_heigth))
+            frame = cv2.resize(frame, (frame_width, frame_heigth))
 
             try:
                 prev_gray = frame_gray
                 frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             except UnboundLocalError:  #error is raise on the first frame
+                
                 frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 prev_gray = frame_gray   #first 2 frame are equal, so on frame 0 pan_x is 0
 
@@ -159,17 +163,21 @@ class video_obj:
             dt, t0 = t1-t0, t1
 
             if video_output:
-                try:
-                    for p in self.grid:
-                        cv2.circle(frame, tuple(p[0]), 2, (0, 255, 0), -1)
-                    cv2.rectangle(frame, (self.frame_width/2, self.frame_heigth-10), (self.frame_width/2+int(pan*50), self.frame_heigth-20), [255,150,150], -1)
-                    draw_str(frame, (20, 20), 'frame nr: {0:d}'.format(frame_idx))
-                    draw_str(frame, (20, 40), 'fps: {0:0.0f}'.format(1e6/dt.microseconds))
-                    draw_str(frame, (self.frame_width-140, 20), 'progress: {0:0.1f}%'.format(frame_idx * 100.0 / self.frame_count))
-                    cv2.imshow('pan_x', frame)
-                    if 0xFF & cv2.waitKey(1) == 27 : break
-                except:
-                    print 'frame processing error on frame:',frame_idx
+                # try:
+                for p in self.grid:
+                    cv2.circle(frame, tuple(p[0]), 2, (0, 255, 0), -1)
+                start_point = (frame_width//2, frame_heigth//k-10)
+                end_point = (frame_width//2+int(pan*50), frame_heigth-20)
+                color = (255,150,150)
+                thickness = 2
+                cv2.rectangle(frame, start_point, end_point, color, thickness)
+                draw_str(frame, (20, 20), 'frame nr: {0:d}'.format(frame_nr))
+                draw_str(frame, (20, 40), 'fps: {0:0.0f}'.format(1e6/dt.microseconds))
+                draw_str(frame, (20, 60), 'progress: {0:0.1f}'.format(frame_nr * 100.0 / self.frame_count))
+                cv2.imshow('pan_x', frame)
+                if 0xFF & cv2.waitKey(1) == 27 : break
+                # except:
+                #     print('frame processing error on frame:',frame_nr)
 
             pan_x.append(pan)
 

@@ -23,7 +23,7 @@ import process_signals as ps
 
 
 
-def main(filename_data, video_files, root, vbox_aviname, csv_type, time_zone=0, video_output='True', choose_peak='True', **rest):
+def gps_video_sync(filename_data, filename_videos, directory, vbox_prefix, csv_type, time_zone=0, video_output='True', choose_peak='True', **rest):
 
     #processing input from config file
     time_zone  = ps.conv_num(time_zone)
@@ -32,17 +32,14 @@ def main(filename_data, video_files, root, vbox_aviname, csv_type, time_zone=0, 
     file_out = filename_data.rsplit('.',1)[0] + '.vbo'
 
     try:
-        scan_window = map(ps.conv_num, rest['scan_window'].split(','))
+        # scan_window = map(ps.conv_num, rest['scan_window'].split(','))
+        scan_window = [float(s) for s in rest['scan_window'].split(',')]
     except KeyError:
         scan_window = None
 
     #create the video files
-    videos = [video_obj(file_name, scan_window) for file_name in video_files]
+    videos = [video_obj(file_name, scan_window) for file_name in filename_videos]
 
-    #Load GPS data
-    print 'Start loading GPS data from .csv file'
-    GPS_Data, Info = loadfile_csv(filename_data, csv_type)
-    GPS_yaw_rate = ps.process_gps(GPS_Data)
 
     video_params=[]
     #Lineup all video's with the GPS data
@@ -51,25 +48,29 @@ def main(filename_data, video_files, root, vbox_aviname, csv_type, time_zone=0, 
         #Data from deshaker video log
         try:
             video.pan_x = loadfile_csv(video.filename_log,'log')[1]
-            print 'Video data has been loaded from .log file'
+            print('Video data has been loaded from .log file')
 
         #if not available make new log file from video
         except IOError:
-            print 'No log file found'
-            print 'I will now try to create a .log file for you (experimental)'
+            print('No log file found')
+            print('I will now try to create a .log file for you (experimental)')
             video.process_video(video.filename_log, video_output)
         finally:
             video.cam.release()
+        #Load GPS data
+        print('Start loading GPS data from .csv file')
+        GPS_Data, Info = loadfile_csv(filename_data, csv_type)
+        GPS_yaw_rate = ps.process_gps(GPS_Data)
 
         #calculate the shift in index with cross correlation
-        print 'Start aligning signals'
+        print('Start aligning signals')
         video.frame_shift = ps.align_signals(video.pan_x, GPS_yaw_rate, choose_peak)
 
         #30 fps is 1/30s per frame :-)
         video.delay = video.frame_shift / video.fps
 
         #positive delay means gps starts earlier then video
-        print 'Frame Shift:\t{0}\n'.format(video.frame_shift), 'Time Shift:\t\t{0}'.format(ps.convert_time(abs(video.delay), 1))
+        print('Frame Shift:\t{0}\n'.format(video.frame_shift), 'Time Shift:\t\t{0}'.format(ps.convert_time(abs(video.delay), 1)))
         video_params.append((video.filename_video, video.length, video.delay))
 
     #output to vbo file for usage in Racelogic Circuit Tools
@@ -77,28 +78,31 @@ def main(filename_data, video_files, root, vbox_aviname, csv_type, time_zone=0, 
         file_name       =   file_out,
         GPS_Data        =   GPS_Data,
         Info            =   Info,
-        vbox_aviname    =   vbox_aviname,
+        vbox_prefix     =   vbox_prefix,
         time_zone       =   time_zone,
         video_params    =   video_params)
 
-    print 'Writing files'
-    print nargs_write_vbox
+    print('Writing files')
+    print(nargs_write_vbox)
     write_vbox(**nargs_write_vbox)
 
 if __name__ == '__main__':
 
-    import ConfigParser
-    config = ConfigParser.ConfigParser()
+    import configparser
+    config = configparser.ConfigParser()
     config.read('gps_video_sync.ini')
 
     for section in config.sections():                                           #do a run with the settings from that section
         nargs_run = dict(config.items(section))
-        print section, 'in progress'
-        root = nargs_run['root']                                                #get the root dir from the settings
+        print(section, 'in progress')
+        root = nargs_run['directory']                                                #get the dir from the settings
         includes = tuple([ext.lower().strip() for ext in nargs_run['video_ext'].split(',')])                   #which extensions to include for processing
+        prefix = nargs_run['vbox_prefix'].lower()
 
-        filename_videos = [os.path.join(root,fi) for fi in os.listdir(root) if fi.lower().endswith(includes)]
-        filename_data = [os.path.join(root,fi.lower()) for fi in os.listdir(root) if fi.lower().endswith(".csv")][0]    #select the first .csv
+        filename_videos = [os.path.join(root,file) for file in os.listdir(root) if file.lower().endswith(includes) and file.lower().startswith(prefix)]
+        print(filename_videos)        
+        filename_data = [os.path.join(root,file) for file in os.listdir(root) if file.lower().endswith(".csv")][0]    #select the first .csv
+        print(filename_data)
 
-        main(filename_data, filename_videos, **nargs_run)
+        gps_video_sync(filename_data, filename_videos, **nargs_run)
 
