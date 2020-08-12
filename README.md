@@ -10,6 +10,7 @@ conda install opencv
 
 
 Input:
+
 GPS: data from Racechrono exported .csv
 Video: .avi or .mp4
 
